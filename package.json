@@ -12,8 +12,8 @@
     "lexware-office",
     "lexoffice"
   ],
-  "homepage": "https://github.com/JannikWempe/mcp-lexware-office",
-  "bugs": "https://github.com/JannikWempe/mcp-lexware-office/issues",
+  "homepage": "https://github.com/bdiaby1/claude_lexware_mcp_2",
+  "bugs": "https://github.com/bdiaby1/claude_lexware_mcp_2/issues",
   "type": "module",
   "bin": {
     "lexware-office": "./build/index.js",
