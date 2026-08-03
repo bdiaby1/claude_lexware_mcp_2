@@ -1,0 +1,2 @@
+minimumReleaseAgeExclude:
+  - csv-parse@7.0.2

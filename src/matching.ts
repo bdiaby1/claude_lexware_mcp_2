@@ -1,20 +1,20 @@
-import type { BankTransaction } from "./csv.js";
-import type { ReceiptInfo } from "./receipts.js";
+import type { BankTransaction } from './csv.js';
+import type { ReceiptInfo } from './receipts.js';
 
 export interface Candidate {
-  amountCents: number | null;
-  date: Date | null;
+	amountCents: number | null;
+	date: Date | null;
 }
 
 export interface MatchResult<T extends Candidate> {
-  transaction: BankTransaction;
-  match: T | null;
-  /** Other candidates that matched on amount but fell outside the date tolerance, for manual review. */
-  amountOnlyMatches: T[];
+	transaction: BankTransaction;
+	match: T | null;
+	/** Other candidates that matched on amount but fell outside the date tolerance, for manual review. */
+	amountOnlyMatches: T[];
 }
 
 function daysBetween(a: Date, b: Date): number {
-  return Math.abs(a.getTime() - b.getTime()) / (1000 * 60 * 60 * 24);
+	return Math.abs(a.getTime() - b.getTime()) / (1000 * 60 * 60 * 24);
 }
 
 /**
@@ -24,29 +24,29 @@ function daysBetween(a: Date, b: Date): number {
  * where a wrong silent match is worse than an unmatched transaction.
  */
 export function matchTransactions<T extends Candidate>(
-  transactions: BankTransaction[],
-  candidates: T[],
-  dateToleranceDays = 3,
+	transactions: BankTransaction[],
+	candidates: T[],
+	dateToleranceDays = 3,
 ): MatchResult<T>[] {
-  return transactions.map((transaction) => {
-    const amountMatches = candidates.filter(
-      (c) => c.amountCents !== null && Math.abs(c.amountCents) === Math.abs(transaction.amountCents),
-    );
+	return transactions.map((transaction) => {
+		const amountMatches = candidates.filter(
+			(c) => c.amountCents !== null && Math.abs(c.amountCents) === Math.abs(transaction.amountCents),
+		);
 
-    const withinDate = amountMatches.filter(
-      (c) => c.date !== null && daysBetween(c.date, transaction.date) <= dateToleranceDays,
-    );
+		const withinDate = amountMatches.filter(
+			(c) => c.date !== null && daysBetween(c.date, transaction.date) <= dateToleranceDays,
+		);
 
-    if (withinDate.length === 1) {
-      return { transaction, match: withinDate[0], amountOnlyMatches: [] };
-    }
+		if (withinDate.length === 1) {
+			return { transaction, match: withinDate[0], amountOnlyMatches: [] };
+		}
 
-    // Zero or ambiguous (>1) date-matches: report as unmatched, keep amount-only
-    // candidates visible for a human to disambiguate.
-    return { transaction, match: null, amountOnlyMatches: amountMatches };
-  });
+		// Zero or ambiguous (>1) date-matches: report as unmatched, keep amount-only
+		// candidates visible for a human to disambiguate.
+		return { transaction, match: null, amountOnlyMatches: amountMatches };
+	});
 }
 
 export function receiptToCandidate(receipt: ReceiptInfo): Candidate & { receipt: ReceiptInfo } {
-  return { amountCents: receipt.amountCents, date: receipt.date, receipt };
+	return { amountCents: receipt.amountCents, date: receipt.date, receipt };
 }

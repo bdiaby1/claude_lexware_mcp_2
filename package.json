@@ -1,42 +1,45 @@
 {
-  "name": "claude_lexware_mcp_2",
-  "version": "1.0.0",
-  "description": "MCP server exposing Lexware Office vouchers/contacts plus bank-CSV/receipt reconciliation tools.",
+  "name": "mcp-lexware-office",
+  "description": "MCP server to interact with Lexware Office",
+  "version": "2.0.0",
+  "license": "MIT",
+  "author": "Jannik Wempe <jannik@wempe.dev>",
+  "contributors": [
+    "Simon Fieber <https://github.com/si0nDE>"
+  ],
+  "keywords": [
+    "mcp",
+    "lexware-office",
+    "lexoffice"
+  ],
+  "homepage": "https://github.com/JannikWempe/mcp-lexware-office",
+  "bugs": "https://github.com/JannikWempe/mcp-lexware-office/issues",
   "type": "module",
-  "main": "dist/index.js",
-  "directories": {
-    "test": "tests"
+  "bin": {
+    "lexware-office": "./build/index.js",
+    "lexware-office-v2": "./build/cli-v2.js"
   },
+  "files": [
+    "build",
+    "docs"
+  ],
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "tsx src/index.ts",
-    "test": "vitest run"
+    "build": "shx rm -rf build && tsc && shx chmod +x build/*.js",
+    "prepare": "npm run build",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --test build/*.test.js"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/bdiaby1/claude_lexware_mcp_2.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/bdiaby1/claude_lexware_mcp_2/issues"
-  },
-  "homepage": "https://github.com/bdiaby1/claude_lexware_mcp_2#readme",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "csv-parse": "^7.0.2",
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1",
     "pdf-parse": "^2.4.5",
-    "zod": "^4.4.3"
+    "quickjs-emscripten": "0.32.0",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@types/express": "^5.0.6",
-    "@types/node": "^26.1.2",
-    "tsx": "^4.23.5",
-    "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
-  }
+    "@types/node": "^22.13.10",
+    "shx": "^0.3.4",
+    "typescript": "^5.8.2"
+  },
+  "packageManager": "pnpm@11.10.0"
 }

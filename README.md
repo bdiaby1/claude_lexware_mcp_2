@@ -1,86 +1,205 @@
-# Rana Lexware MCP Server
+# Lexware Office MCP Server
 
-MCP server that exposes Lexware Office (formerly lexoffice) data as tools, plus
-reconciliation helpers for matching a bank statement CSV (EUR amount + date)
-against Lexware vouchers or scanned receipt PDFs.
+An MCP server for [Lexware Office](https://www.lexware.de/lexware-office/) (formerly Lexoffice). It lets MCP-capable assistants query and manage contacts, sales documents, vouchers, files, payments, webhooks, and reference data through the Lexware Office public API.
 
-## Setup
+> This is a customized fork of [JannikWempe/mcp-lexware-office](https://github.com/JannikWempe/mcp-lexware-office) (MIT-licensed), with two added tools — `match_bank_csv_to_vouchers` and `match_receipts_to_bank_csv` — for reconciling a bank statement CSV against Lexware vouchers or scanned receipt PDFs. See [Bank reconciliation tools](#bank-reconciliation-tools) below. All `search`/`execute` Code Mode functionality is unchanged from upstream.
 
-```bash
-npm install
-cp .env.example .env   # fill in MCP_AUTH_TOKEN and LEXWARE_API_KEY
-npm run build
-npm start               # or `npm run dev` for a TS dev run without building
+The server uses **Code Mode**: instead of one MCP tool per API endpoint, it exposes two tools — `search` to explore a curated Lexware API catalog and `execute` to run constrained, sandboxed API workflows. This keeps the tool surface small while covering the whole API, including pagination, aggregation, and multi-step reporting in a single call.
+
+> Upgrading from 1.x? The legacy tool-per-endpoint server was removed in 2.0.0. See [docs/guide.md#migrating-from-1x](docs/guide.md#migrating-from-1x).
+
+## Features
+
+- **Broad Lexware Office API coverage** for read and write workflows
+- **Sales documents**: invoices, quotations, order confirmations, credit notes, delivery notes, dunning notices, and down-payment invoices
+- **Contact management**: create, read, and update customers and vendors
+- **Bookkeeping**: vouchers, posting categories, payments, and file uploads
+- **Reference data**: profile, countries, print layouts, payment conditions, recurring templates
+- **Webhooks**: create, list, inspect, and delete event subscriptions
+- **Read-only by default**: writes require explicit opt-in via environment variable
+
+## How it works
+
+The server exposes two MCP tools:
+
+- `search` — runs a sandboxed JavaScript async arrow function against a curated OpenAPI-lite Lexware catalog.
+- `execute` — runs a sandboxed JavaScript async arrow function with one host capability, `lexware.request`, for relative `/v1/...` Lexware API calls.
+
+Example `execute` call:
+
+```js
+async () => {
+  const response = await lexware.request({
+    method: 'GET',
+    path: '/v1/contacts',
+    query: { name: 'Muster', page: 0, size: 10 }
+  });
+
+  return response.data;
+}
 ```
 
-The server listens on `PORT` (default `8080`) and exposes MCP over streamable
-HTTP at `POST /mcp`, authenticated via `Authorization: Bearer <MCP_AUTH_TOKEN>`.
+The sandbox does **not** receive the Lexware API key, Node globals, filesystem access, imports, `fetch`, or arbitrary network access. `lexware.request` only accepts relative `/v1/...` paths and sends the API key from the host process.
 
-Get a Lexware Office API key from your Lexware Office account under
-Settings → API-Zugang (developers.lexware.io covers scopes/rate limits).
+### Binary-safe file uploads
 
-## Tools
+Uploads are binary-safe via `multipart` parts with `contentPath` (host reads a local file from disk), `contentBase64` (binary FormData parts), or `bodyBase64` (raw binary body). The host reads/decodes and builds `Buffer` / `Blob` bodies outside the QuickJS sandbox.
+
+Preferred: `contentPath` — pass the file's absolute path instead of inlining bytes. Requires `LEXWARE_OFFICE_ALLOW_WRITES=true` (uploads are writes) and works only when the MCP server runs on the machine that has the file:
+
+```js
+async () => {
+  const response = await lexware.request({
+    method: 'POST',
+    path: '/v1/files',
+    multipart: [
+      { name: 'file', contentType: 'application/pdf', contentPath: '/absolute/path/to/receipt.pdf' },
+      { name: 'type', value: 'voucher' },
+    ],
+  });
+  // response.sent echoes { bytes, parts: [{ name, filename, bytes, sha256 }] } for integrity checks
+  return { id: response.data?.id, sent: response.sent };
+}
+```
+
+See [docs/guide.md](docs/guide.md#binary-safe-file-uploads) for details and all supported modes.
+
+## Bank reconciliation tools
+
+Two additional MCP tools (outside Code Mode, no sandbox involved) for matching a bank statement CSV against Lexware data:
 
 | Tool | Description |
 |---|---|
-| `lexware_list_vouchers` | Lists vouchers (invoices, receipts, credit notes). `voucherType` and `voucherStatus` are required by the Lexware API itself; date range is optional. |
-| `lexware_get_voucher` | Fetches a single voucher by id. |
-| `lexware_list_contacts` | Lists contacts (customers/vendors). |
-| `match_bank_csv_to_vouchers` | Parses a bank CSV and matches transactions against open Lexware vouchers by exact EUR amount + a date tolerance window. |
-| `match_receipts_to_bank_csv` | Extracts amount/date from receipt PDFs (base64) and matches them against a bank CSV the same way. |
+| `match_bank_csv_to_vouchers` | Parses a bank CSV and matches transactions against Lexware vouchers (invoices, receipts, credit notes, ...) fetched live from `/v1/voucherlist`. |
+| `match_receipts_to_bank_csv` | Extracts amount/date from receipt PDFs (passed as base64) and matches them against a bank CSV the same way — for reconciling scanned receipts that aren't in Lexware yet. |
 
-### Matching logic
+**Matching logic:** amount-first — a transaction only matches a candidate (voucher or receipt) with the **exact same EUR amount** (sign-insensitive: bank exports show debits as negative, voucher/receipt totals as positive). Among amount matches, only one falling inside `dateToleranceDays` (default 3) counts as a match; zero or more than one date-window match is reported as `unmatched` with the amount-only candidates listed for manual review. Ambiguous data is never silently guessed — a wrong match in bookkeeping reconciliation is worse than an unmatched transaction.
 
-Matching is amount-first: a transaction only matches a candidate (voucher or
-receipt) with the **exact same EUR amount** (sign-insensitive — bank exports
-show debits as negative, voucher/receipt totals as positive). Among amount
-matches, only one falling inside `dateToleranceDays` (default 3, configurable
-per call) counts as a match. Zero or more-than-one date-window matches are
-reported as `unmatched`, with the amount-only candidates listed for manual
-review — the tool never guesses on ambiguous data, since a wrong silent match
-in bookkeeping reconciliation is worse than an unmatched transaction.
+**Bank CSV format:** auto-detects the delimiter from the header line (`;` for German exports, `,` otherwise — needed because German amounts use `,` as the decimal separator) and common column names: `Datum`/`Date`/`Buchungstag` for the date, `Betrag`/`Amount`/`Umsatz` for the EUR amount.
 
-Receipt PDF extraction is a best-effort regex over the PDF's text layer
-(looks for "Gesamtbetrag/Gesamt/Total/Brutto: X,XX €" and dd.mm.yyyy /
-yyyy-mm-dd dates). It will not work on receipts that are pure scanned images
-without a text layer (no OCR is performed) — check the `extractionIssues`
-field in the tool result and review those manually.
+**Receipt PDF extraction** is a best-effort regex over the PDF's text layer (looks for "Gesamtbetrag/Gesamt/Total/Brutto: X,XX €" and dd.mm.yyyy/yyyy-mm-dd dates). It does not OCR scanned images without a text layer — check `extractionIssues` in the result and review those manually.
 
-### Bank CSV format
+**Voucher search:** `voucherType`/`voucherStatus` default to Lexware's `any` wildcard and accept comma-separated values (e.g. `purchaseinvoice` + `open,paid`) to narrow the search. The date range sent to `/v1/voucherlist` is padded by `dateToleranceDays` (+1 day) so vouchers just outside the transactions' own date span aren't missed. The endpoint caps out at 10,000 matching entries — narrow the filters or split the CSV by date range if you hit that.
 
-Auto-detects common column names: `Datum`/`Date`/`Buchungstag` for the date
-and `Betrag`/`Amount`/`Umsatz` for the EUR amount (German `1.234,56` and plain
-`1234.56` decimal formats both work). Pass `dateColumn`/`amountColumn`
-explicitly if your export uses different headers.
+## Configuration
 
-## Using it as an MCP server (e.g. from Claude Code)
+### Get a Lexware Office API key
 
-Add to your MCP config (e.g. `~/.claude.json`):
+Create an API key at <https://app.lexoffice.de/addons/public-api>.
+
+### Prerequisites
+
+- Node.js 22 or higher
+- `LEXWARE_OFFICE_API_KEY` environment variable
+
+### Claude Desktop / MCP config with NPX
+
+#### Recommended: consume the packaged server
+
+Run the packaged binary from the latest GitHub release (`#semver:^2` resolves to the newest `v2.x` tag and picks up future releases automatically). The package builds itself during GitHub installs via `prepare`, so users do **not** need to clone the repository or commit `build/` artifacts.
 
 ```json
 {
   "mcpServers": {
-    "rana-lexware": {
-      "type": "http",
-      "url": "http://localhost:8080/mcp",
-      "headers": { "Authorization": "Bearer <MCP_AUTH_TOKEN>" }
+    "lexware-office": {
+      "command": "npx",
+      "args": ["-y", "--package=github:JannikWempe/mcp-lexware-office#semver:^2", "lexware-office"],
+      "env": {
+        "LEXWARE_OFFICE_API_KEY": "YOUR_API_KEY_HERE",
+        "LEXWARE_OFFICE_READ_ONLY": "true"
+      }
     }
   }
 }
 ```
 
-## Network requirement
-
-This server calls `api.lexware.io` directly — it needs outbound HTTPS access
-to that host from wherever it runs. If you run it inside a sandboxed dev
-environment with a restrictive egress policy, make sure that host is
-reachable (or run it on your own machine/server instead).
-
-## Tests
+**Troubleshooting:** If the `npx` command above fails during git-dependency preparation with an error mentioning `--before`, your npm user config may contain `minimum-release-age`, which conflicts with npm's internal `--before` flag. Two fixes:
 
 ```bash
+# Option 1: bypass your user config for this invocation
+NPM_CONFIG_USERCONFIG=/dev/null \
+  npx -y --package=github:JannikWempe/mcp-lexware-office#semver:^2 lexware-office
+
+# Option 2: remove the conflicting setting permanently
+npm config delete minimum-release-age --location=user
+```
+
+When this package is published to npm, replace the GitHub package spec with the npm package name:
+
+```json
+"args": ["-y", "--package=mcp-lexware-office", "lexware-office"]
+```
+
+#### Local development from TypeScript source
+
+For local development, you can run the TypeScript source directly with `tsx` after cloning the repo and installing dependencies:
+
+```json
+{
+  "mcpServers": {
+    "lexware-office-local": {
+      "command": "npx",
+      "args": ["-y", "tsx", "/absolute/path/to/mcp-lexware-office/src/index.ts"],
+      "env": {
+        "LEXWARE_OFFICE_API_KEY": "YOUR_API_KEY_HERE",
+        "LEXWARE_OFFICE_READ_ONLY": "true"
+      }
+    }
+  }
+}
+```
+
+Use this source-based setup only for development. End users should prefer the packaged binary above.
+
+### Write safety
+
+**The server is read-only by default.** `POST`, `PUT`, `PATCH`, and `DELETE` requests are blocked unless you explicitly opt in:
+
+```json
+{
+  "LEXWARE_OFFICE_ALLOW_WRITES": "true"
+}
+```
+
+`LEXWARE_OFFICE_READ_ONLY=true` is a hard block that wins over `ALLOW_WRITES=true`:
+
+```json
+{
+  "LEXWARE_OFFICE_READ_ONLY": "true"
+}
+```
+
+See [docs/guide.md#permissions](docs/guide.md#permissions) for the detailed permission model.
+
+## Docker
+
+Build the image:
+
+```bash
+docker build -t mcp-lexware-office:latest -f src/Dockerfile .
+```
+
+Run it:
+
+```bash
+docker run -i --rm \
+  -e LEXWARE_OFFICE_API_KEY \
+  -e LEXWARE_OFFICE_READ_ONLY=true \
+  mcp-lexware-office:latest
+```
+
+## Build and test
+
+```bash
+npm run build
 npm test
 ```
 
-All tests are self-contained (mocked `fetch` for the Lexware client, no
-network calls) so they run without a real API key.
+## Documentation
+
+- [Guide and migration notes](docs/guide.md)
+- [Lexware Office API key setup](https://app.lexoffice.de/addons/public-api)
+
+## License
+
+MIT. See [LICENSE](LICENSE).
