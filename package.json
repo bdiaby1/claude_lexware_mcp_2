@@ -1,0 +1,42 @@
+{
+  "name": "claude_lexware_mcp_2",
+  "version": "1.0.0",
+  "description": "MCP server exposing Lexware Office vouchers/contacts plus bank-CSV/receipt reconciliation tools.",
+  "type": "module",
+  "main": "dist/index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bdiaby1/claude_lexware_mcp_2.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/bdiaby1/claude_lexware_mcp_2/issues"
+  },
+  "homepage": "https://github.com/bdiaby1/claude_lexware_mcp_2#readme",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "csv-parse": "^7.0.2",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "pdf-parse": "^2.4.5",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.1.2",
+    "tsx": "^4.23.5",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}
