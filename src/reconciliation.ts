@@ -153,8 +153,14 @@ export function registerReconciliationTools(server: McpServer, lexwareClient: Le
 							amountOnlyCandidates: r.amountOnlyMatches.map((c) => c.receipt.fileName),
 						})),
 					extractionIssues: receiptInfos
-						.filter((r) => r.amountCents === null || r.date === null)
-						.map((r) => ({ fileName: r.fileName, amountFound: r.amountCents !== null, dateFound: r.date !== null })),
+						.filter((r) => r.amountCents === null || r.date === null || (r.currency !== null && r.currency !== 'EUR'))
+						.map((r) => ({
+							fileName: r.fileName,
+							amountFound: r.amountCents !== null,
+							currency: r.currency,
+							dateFound: r.date !== null,
+							note: r.currency !== null && r.currency !== 'EUR' ? `Amount is in ${r.currency}, not EUR — excluded from matching, not a real EUR bank amount.` : undefined,
+						})),
 				});
 			} catch (error) {
 				return toolResult({ error: error instanceof Error ? error.message : String(error) }, true);

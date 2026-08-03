@@ -48,5 +48,9 @@ export function matchTransactions<T extends Candidate>(
 }
 
 export function receiptToCandidate(receipt: ReceiptInfo): Candidate & { receipt: ReceiptInfo } {
-	return { amountCents: receipt.amountCents, date: receipt.date, receipt };
+	// Bank transactions here are EUR-denominated; a foreign-currency receipt amount
+	// (e.g. a USD invoice) must never be treated as an equal EUR amount, so exclude
+	// it from amount matching entirely rather than comparing raw numbers across currencies.
+	const eurAmountCents = receipt.currency === null || receipt.currency === 'EUR' ? receipt.amountCents : null;
+	return { amountCents: eurAmountCents, date: receipt.date, receipt };
 }
