@@ -23,7 +23,7 @@ Settings → API-Zugang (developers.lexware.io covers scopes/rate limits).
 
 | Tool | Description |
 |---|---|
-| `lexware_list_vouchers` | Lists vouchers (invoices, receipts, credit notes) with optional type/status/date filters. |
+| `lexware_list_vouchers` | Lists vouchers (invoices, receipts, credit notes). `voucherType` and `voucherStatus` are required by the Lexware API itself; date range is optional. |
 | `lexware_get_voucher` | Fetches a single voucher by id. |
 | `lexware_list_contacts` | Lists contacts (customers/vendors). |
 | `match_bank_csv_to_vouchers` | Parses a bank CSV and matches transactions against open Lexware vouchers by exact EUR amount + a date tolerance window. |

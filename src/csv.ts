@@ -73,10 +73,23 @@ export function parseGermanOrIsoDate(raw: string): Date {
   throw new Error(`Could not parse date: "${raw}"`);
 }
 
+/**
+ * Picks the field delimiter from the header line only. Auto-detecting across the
+ * whole file is unsafe here: German bank exports use ";" as the delimiter precisely
+ * because amounts use "," as the decimal separator, so a comma-count over data rows
+ * would misfire on every amount field.
+ */
+function sniffDelimiter(csvContent: string): string {
+  const headerLine = csvContent.split(/\r?\n/, 1)[0] ?? "";
+  const semicolons = (headerLine.match(/;/g) ?? []).length;
+  const commas = (headerLine.match(/,/g) ?? []).length;
+  return semicolons >= commas ? ";" : ",";
+}
+
 export function parseBankCsv(csvContent: string, options: ParseBankCsvOptions = {}): BankTransaction[] {
   const rows: Record<string, string>[] = parse(csvContent, {
     columns: true,
-    delimiter: options.delimiter ?? [",", ";"],
+    delimiter: options.delimiter ?? sniffDelimiter(csvContent),
     skip_empty_lines: true,
     trim: true,
     relax_column_count: true,

@@ -46,4 +46,20 @@ describe("parseBankCsv", () => {
     const csv = "Foo,Bar\n1,2\n";
     expect(() => parseBankCsv(csv)).toThrow(/Could not find a matching column/);
   });
+
+  it("does not let German decimal commas in amounts break semicolon-delimited parsing", () => {
+    // Regression: naive [",", ";"] auto-detection mis-split "13,39" into two fields.
+    const csv = "Datum;Betrag;Verwendungszweck\n26.07.2026;-13,39;Haufe Rechnung\n26.07.2026;-999,99;Kein Treffer\n";
+    const transactions = parseBankCsv(csv);
+    expect(transactions).toHaveLength(2);
+    expect(transactions[0].amountCents).toBe(-1339);
+    expect(transactions[1].amountCents).toBe(-99999);
+  });
+
+  it("parses comma-delimited CSV with plain decimal points", () => {
+    const csv = "Date,Amount\n2026-01-05,42.50\n";
+    const transactions = parseBankCsv(csv);
+    expect(transactions).toHaveLength(1);
+    expect(transactions[0].amountCents).toBe(4250);
+  });
 });

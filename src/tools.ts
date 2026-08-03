@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { LexwareClient } from "./lexware/client.js";
+import { LexwareClient, type LexwareVoucher } from "./lexware/client.js";
 import { parseBankCsv } from "./csv.js";
 import { extractReceiptInfo } from "./receipts.js";
 import { matchTransactions, receiptToCandidate } from "./matching.js";
@@ -14,10 +14,11 @@ export function registerTools(server: McpServer, lexware: LexwareClient): void {
     "lexware_list_vouchers",
     {
       description:
-        "Lists Lexware Office vouchers (invoices, receipts, credit notes, ...) with optional filters.",
+        "Lists Lexware Office vouchers (invoices, receipts, credit notes, ...). voucherType and " +
+        "voucherStatus are required by the Lexware API itself.",
       inputSchema: {
-        voucherType: z.string().optional().describe("e.g. salesinvoice, purchaseinvoice, invoice, creditnote"),
-        voucherStatus: z.string().optional().describe("e.g. open, paid, voided, transferred"),
+        voucherType: z.string().describe("e.g. salesinvoice, purchaseinvoice, invoice, creditnote"),
+        voucherStatus: z.string().describe("e.g. open, paid, voided, transferred, draft"),
         voucherDateFrom: z.string().optional().describe("ISO date, e.g. 2026-01-01"),
         voucherDateTo: z.string().optional().describe("ISO date, e.g. 2026-12-31"),
         page: z.number().int().min(0).optional(),
@@ -53,7 +54,7 @@ export function registerTools(server: McpServer, lexware: LexwareClient): void {
         "open Lexware vouchers by exact amount and a date tolerance window. Fetches the voucher list itself.",
       inputSchema: {
         csvContent: z.string().describe("Raw CSV file content"),
-        voucherType: z.string().optional(),
+        voucherType: z.string().describe("e.g. salesinvoice, purchaseinvoice, invoice, creditnote"),
         voucherStatus: z.string().optional().describe("Defaults to 'open'"),
         dateToleranceDays: z.number().int().min(0).max(60).optional().default(3),
       },
@@ -64,19 +65,25 @@ export function registerTools(server: McpServer, lexware: LexwareClient): void {
         return text({ matched: [], unmatched: [], note: "No transactions parsed from CSV." });
       }
 
+      const dayMs = 24 * 60 * 60 * 1000;
+      // Pad by the match tolerance (plus one day of slack for voucher-date/timezone
+      // boundary effects observed on the Lexware side) so a voucher just outside the
+      // transactions' own min/max date range isn't silently excluded from the search.
+      const padMs = (dateToleranceDays + 1) * dayMs;
       const dates = transactions.map((t) => t.date.getTime());
-      const voucherDateFrom = new Date(Math.min(...dates)).toISOString().slice(0, 10);
-      const voucherDateTo = new Date(Math.max(...dates)).toISOString().slice(0, 10);
+      const voucherDateFrom = new Date(Math.min(...dates) - padMs).toISOString().slice(0, 10);
+      const voucherDateTo = new Date(Math.max(...dates) + padMs).toISOString().slice(0, 10);
 
-      const page = await lexware.listVouchers({
-        voucherType,
-        voucherStatus: voucherStatus ?? "open",
-        voucherDateFrom,
-        voucherDateTo,
-        size: 250,
-      });
+      const voucherFilters = { voucherType, voucherStatus: voucherStatus ?? "open", voucherDateFrom, voucherDateTo };
+      const vouchers: LexwareVoucher[] = [];
+      const maxPages = 40; // 40 * 250 = 10,000 vouchers, well beyond a manual reconciliation batch
+      for (let pageNumber = 0; pageNumber < maxPages; pageNumber++) {
+        const page = await lexware.listVouchers({ ...voucherFilters, page: pageNumber, size: 250 });
+        vouchers.push(...page.content);
+        if (pageNumber >= page.totalPages - 1) break;
+      }
 
-      const candidates = page.content.map((v) => ({
+      const candidates = vouchers.map((v) => ({
         amountCents: Math.round(v.totalAmount * 100),
         date: new Date(v.voucherDate),
         voucher: v,

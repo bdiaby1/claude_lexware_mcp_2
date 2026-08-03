@@ -10,8 +10,10 @@ export class LexwareApiError extends Error {
 }
 
 export interface VoucherListFilters {
-  voucherType?: string;
-  voucherStatus?: string;
+  /** Required by the Lexware /voucherlist endpoint, e.g. purchaseinvoice, salesinvoice, creditnote. */
+  voucherType: string;
+  /** Required by the Lexware /voucherlist endpoint, e.g. open, paid, voided, transferred, draft. */
+  voucherStatus: string;
   archived?: boolean;
   contactId?: string;
   voucherDateFrom?: string;
@@ -86,10 +88,10 @@ export class LexwareClient {
     return (await response.json()) as T;
   }
 
-  async listVouchers(filters: VoucherListFilters = {}): Promise<VoucherListPage> {
+  async listVouchers(filters: VoucherListFilters): Promise<VoucherListPage> {
     const params = new URLSearchParams();
-    if (filters.voucherType) params.set("voucherType", filters.voucherType);
-    if (filters.voucherStatus) params.set("voucherStatus", filters.voucherStatus);
+    params.set("voucherType", filters.voucherType);
+    params.set("voucherStatus", filters.voucherStatus);
     if (filters.archived !== undefined) params.set("archived", String(filters.archived));
     if (filters.contactId) params.set("contactId", filters.contactId);
     if (filters.voucherDateFrom) params.set("voucherDateFrom", filters.voucherDateFrom);
