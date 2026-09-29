@@ -301,3 +301,5 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+# Private coaching case logs — keep out of git (personal data about third parties)
+game-coaching/05-session-protokoll.md
