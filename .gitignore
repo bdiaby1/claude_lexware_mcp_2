@@ -303,3 +303,4 @@ cython_debug/
 #.idea/
 # Private coaching case logs — keep out of git (personal data about third parties)
 game-coaching/05-session-protokoll.md
+game-coaching/06-mindset-anti-bitterness.md
